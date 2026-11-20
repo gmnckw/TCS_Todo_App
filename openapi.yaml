@@ -1,0 +1,605 @@
+openapi: 3.0.3
+info:
+  title: Todo App API
+  version: 1.0.0
+  description: |
+    REST API for the Todo App. JSON only.
+
+    **Envelopes.** Every response uses one of two shapes.
+    - Success: `{ "success": true, "message": "", "data": {} }`
+    - Error: `{ "success": false, "message": "Validation failed", "errors": [] }`
+
+    **Authentication.** All routes require a JWT bearer token except
+    `POST /api/auth/login` and `GET /api/health`.
+
+    **Business rules enforced by the API.**
+    - `title` and `dueDate` are mandatory when creating a task.
+    - `dueDate` cannot be in the past on creation.
+    - Employees manage only their own tasks. Managers can manage every task and reassign.
+    - Completed tasks are read-only unless a manager reopens them.
+    - `isOverdue` is computed by the server: the task is not completed and `dueDate` has passed.
+servers:
+  - url: http://localhost:4000
+    description: Local development
+tags:
+  - name: Health
+    description: Service liveness
+  - name: Auth
+    description: Authentication
+  - name: Tasks
+    description: Task management
+  - name: Reports
+    description: Task reporting
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Check service health
+      security: []
+      responses:
+        '200':
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Log in and obtain a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Email or password is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Invalid credentials
+                errors: []
+
+  /api/tasks:
+    get:
+      tags: [Tasks]
+      operationId: listTasks
+      summary: List tasks
+      description: |
+        Employees receive only their own tasks. Managers receive all tasks and may
+        filter by `assigneeId`. An employee who passes an `assigneeId` other than
+        their own receives `403`.
+      parameters:
+        - name: status
+          in: query
+          description: Return only tasks with this status.
+          schema:
+            $ref: '#/components/schemas/TaskStatus'
+        - name: priority
+          in: query
+          description: Return only tasks with this priority.
+          schema:
+            $ref: '#/components/schemas/TaskPriority'
+        - name: assigneeId
+          in: query
+          description: Return only tasks assigned to this user.
+          schema:
+            $ref: '#/components/schemas/Id'
+        - name: isOverdue
+          in: query
+          description: Return only overdue (`true`) or not overdue (`false`) tasks.
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Tasks matching the filters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      summary: Create a task
+      description: |
+        The new task starts with status `TODO`. When `assigneeId` is omitted the task
+        is assigned to the caller. Only managers may assign a task to another user;
+        an employee who does so receives `403`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateRequest'
+      responses:
+        '201':
+          description: Task created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The requested `assigneeId` does not match any user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: User not found
+                errors: []
+
+  /api/tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Tasks]
+      operationId: getTask
+      summary: Get a task
+      description: Employees can read only their own tasks; managers can read any task.
+      responses:
+        '200':
+          description: The task.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Tasks]
+      operationId: updateTask
+      summary: Update a task
+      description: |
+        Send only the fields to change; at least one is required.
+
+        Returns `403` when:
+        - an employee updates a task that is not assigned to them;
+        - an employee changes `assigneeId` (only managers can reassign);
+        - the task is `COMPLETED` and the caller is an employee. A manager reopens a
+          completed task by setting `status` to another value.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateRequest'
+      responses:
+        '200':
+          description: Task updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Tasks]
+      operationId: deleteTask
+      summary: Delete a task
+      description: |
+        Employees can delete only their own tasks, and not once they are `COMPLETED`.
+        Managers can delete any task.
+      responses:
+        '200':
+          description: Task deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptySuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/reports/summary:
+    get:
+      tags: [Reports]
+      operationId: getTaskSummaryReport
+      summary: Get a task summary report
+      description: |
+        Task counts in total, by status, and overdue. Employees get a report over
+        their own tasks. Managers get a report over all tasks and may narrow it with
+        `assigneeId`. An employee who passes an `assigneeId` other than their own
+        receives `403`.
+      parameters:
+        - name: assigneeId
+          in: query
+          description: Report only on tasks assigned to this user.
+          schema:
+            $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: The summary report.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskSummaryReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT returned by `POST /api/auth/login`, sent as `Authorization: Bearer <token>`."
+
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      description: Task identifier.
+      schema:
+        $ref: '#/components/schemas/Id'
+
+  responses:
+    BadRequest:
+      description: The request failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Validation failed
+            errors:
+              - field: title
+                message: title is required
+    Unauthorized:
+      description: The JWT is missing, invalid, or expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Authentication required
+            errors: []
+    Forbidden:
+      description: The caller's role or ownership does not permit this operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: You are not allowed to perform this action
+            errors: []
+    NotFound:
+      description: The task does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Task not found
+            errors: []
+
+  schemas:
+    Id:
+      type: integer
+      minimum: 1
+      example: 1
+
+    Role:
+      type: string
+      enum: [EMPLOYEE, MANAGER]
+
+    TaskPriority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+
+    TaskStatus:
+      type: string
+      enum: [TODO, IN_PROGRESS, COMPLETED]
+
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+          example: Ana Torres
+        email:
+          type: string
+          format: email
+          example: ana.torres@example.com
+        role:
+          $ref: '#/components/schemas/Role'
+
+    Task:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - priority
+        - status
+        - dueDate
+        - assigneeId
+        - isOverdue
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+        title:
+          type: string
+          example: Prepare sprint report
+        description:
+          type: string
+          nullable: true
+          example: Summarise velocity and open risks.
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        dueDate:
+          type: string
+          format: date-time
+          example: '2026-12-01T17:00:00Z'
+        assigneeId:
+          $ref: '#/components/schemas/Id'
+        isOverdue:
+          type: boolean
+          readOnly: true
+          description: True when the task is not `COMPLETED` and `dueDate` has passed. Computed by the server.
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: ana.torres@example.com
+        password:
+          type: string
+          format: password
+          writeOnly: true
+
+    LoginData:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT to send as a bearer token on every other request.
+        user:
+          $ref: '#/components/schemas/User'
+
+    TaskCreateRequest:
+      type: object
+      required: [title, dueDate]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        priority:
+          allOf:
+            - $ref: '#/components/schemas/TaskPriority'
+          default: MEDIUM
+        dueDate:
+          type: string
+          format: date-time
+          description: Must not be in the past.
+        assigneeId:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          description: Defaults to the caller. Only managers may set another user.
+
+    TaskUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        dueDate:
+          type: string
+          format: date-time
+        assigneeId:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          description: Manager only.
+
+    TaskSummaryReport:
+      type: object
+      required: [total, overdue, byStatus]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        overdue:
+          type: integer
+          minimum: 0
+          description: Number of tasks where `isOverdue` is true.
+        byStatus:
+          type: object
+          required: [TODO, IN_PROGRESS, COMPLETED]
+          properties:
+            TODO:
+              type: integer
+              minimum: 0
+            IN_PROGRESS:
+              type: integer
+              minimum: 0
+            COMPLETED:
+              type: integer
+              minimum: 0
+
+    HealthData:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    SuccessEnvelope:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+          example: ''
+        data:
+          description: Response payload; its shape depends on the endpoint.
+
+    ErrorEnvelope:
+      type: object
+      required: [success, message, errors]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        message:
+          type: string
+          example: Validation failed
+        errors:
+          type: array
+          description: Per-field validation problems. Empty when the error is not field-specific.
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: dueDate
+        message:
+          type: string
+          example: dueDate cannot be in the past
+
+    EmptySuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              example: {}
+
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/HealthData'
+
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/LoginData'
+
+    TaskResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Task'
+
+    TaskListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Task'
+
+    TaskSummaryReportResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TaskSummaryReport'
