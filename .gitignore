@@ -10,3 +10,12 @@ playwright-report/
 *.db
 .claude/settings.local.json
 CLAUDE.local.md
+.DS_Store
+*.log
+npm-debug.log*
+.eslintcache
+*.tsbuildinfo
+.vite/
+.idea/
+.vscode/*
+!.vscode/extensions.json
