@@ -2,12 +2,38 @@
 
 ## Prerequisites
 
-- Node.js 22 or later
+- Node.js 22.13 or later
 - npm
 
 ## Run the application
 
-Run the backend and the frontend in two separate terminals.
+### Quick start (one command)
+
+Set `SEED_PASSWORD` (or create `backend/.env`) and run the launcher from the repository root. It installs missing dependencies, starts the API, waits for it to be healthy, then starts the frontend. Press Ctrl+C to stop both.
+
+macOS / Linux / Git Bash:
+
+```bash
+SEED_PASSWORD=<password> scripts/run-app.sh
+```
+
+Windows (cmd):
+
+```bat
+set "SEED_PASSWORD=<password>" && scripts\run-app.cmd
+```
+
+Windows (PowerShell):
+
+```powershell
+$env:SEED_PASSWORD = '<password>'; scripts\run-app.cmd
+```
+
+Optional: `PORT` (backend, default 4000) and `FRONTEND_PORT` (default 5173).
+
+### Manual setup
+
+Or run the backend and the frontend in two separate terminals.
 
 ### 1. Start the backend
 

@@ -31,6 +31,6 @@ export const VALIDATION_FAILED_MESSAGE = 'Validation failed';
 export const INTERNAL_ERROR_MESSAGE = 'Internal server error';
 
 export const DEMO_USERS = Object.freeze([
-  { name: 'Ana Torres', email: 'ana.torres@example.com', role: ROLES.EMPLOYEE },
-  { name: 'Marco Ruiz', email: 'marco.ruiz@example.com', role: ROLES.MANAGER },
+  { name: 'Ana Torres', email: 'employee@example.com', role: ROLES.EMPLOYEE },
+  { name: 'Marco Ruiz', email: 'manager@example.com', role: ROLES.MANAGER },
 ]);

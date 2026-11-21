@@ -1,7 +1,7 @@
 # Backend Guidelines
 
 ## Stack
-Node.js, Express, JWT auth, in-memory SQLite (better-sqlite3). Plain JavaScript (ES modules).
+Node.js, Express, JWT auth, in-memory SQLite (built-in node:sqlite). Plain JavaScript (ES modules).
 
 ## Architecture
 Routes -> Controllers -> Services -> Repositories -> Database

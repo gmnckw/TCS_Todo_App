@@ -46,14 +46,14 @@ cleanup() {
 
 install_if_missing() {
   local dir="$1"
-  if [[ ! -d "${dir}/node_modules" ]]; then
+  if [[ ! -f "${dir}/node_modules/.package-lock.json" ]]; then
     log "Installing dependencies in ${dir##*/}/"
     (cd "${dir}" && npm install)
   fi
 }
 
 require_configuration() {
-  command -v node >/dev/null || fail "Node.js 22 or later is required."
+  command -v node >/dev/null || fail "Node.js 22.13 or later is required."
   if [[ -z "${SEED_PASSWORD:-}" && ! -f "${BACKEND_DIR}/.env" ]]; then
     fail "Set SEED_PASSWORD (min 8 chars) or create backend/.env from backend/.env.example."
   fi

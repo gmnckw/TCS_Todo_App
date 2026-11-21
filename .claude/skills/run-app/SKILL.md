@@ -5,12 +5,13 @@ description: Use this skill whenever the user asks to run, start, launch, or ser
 
 # Run App Skill
 
-Start the backend (Express API) and frontend (Vite dev server) with `scripts/run-app.sh`.
+Start the backend (Express API) and frontend (Vite dev server) with `scripts/run-app.sh` (macOS/Linux/Git Bash) or `scripts\run-app.cmd` (Windows cmd/PowerShell).
 
 Steps:
 1. Make sure `SEED_PASSWORD` (min 8 characters) is available: either in the environment or in `backend/.env`. Never write secrets into code or commit `.env`. If it is missing, ask the user for a value or tell them to create `backend/.env` from `backend/.env.example`.
 2. Run the script from the repository root in the background so the session is not blocked:
    `SEED_PASSWORD=<value> scripts/run-app.sh`
+   Windows: `set "SEED_PASSWORD=<value>" && scripts\run-app.cmd` (cmd) or `$env:SEED_PASSWORD='<value>'; scripts\run-app.cmd` (PowerShell)
    `JWT_SECRET` is optional; the script generates a temporary one when unset and no `backend/.env` exists.
 3. The script installs missing dependencies, starts the API, waits for `/api/v1/health`, then starts the frontend.
 4. Confirm both are up:
