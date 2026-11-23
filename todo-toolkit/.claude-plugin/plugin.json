@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "todo-toolkit",
+  "displayName": "To-Do Toolkit",
+  "version": "1.0.0",
+  "description": "Skills, agents, and hooks for the full-stack To-Do application built in this course.",
+  "author": {
+    "name": "Course Team"
+  },
+  "license": "MIT",
+  "keywords": ["todo", "fullstack", "testing", "course"]
+}
